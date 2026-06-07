@@ -72,8 +72,15 @@ return function(env)
 		end
 	end
 
+	-- Lua truthiness differs from JS: 0 / "" / NaN are all truthy (only nil/false are falsy).
+	-- For property coercion a numeric 0 must mean false, so don't use `not not v` on numbers.
+	local function toBoolean(v: any): boolean
+		if type(v) == "number" then return v ~= 0 end
+		return not not v
+	end
+
 	local function coerceByValueType(v: any, vt: string, current: any): any
-		if vt == "bool" then return not not v
+		if vt == "bool" then return toBoolean(v)
 		elseif vt == "string" or vt == "Content" or vt == "ContentId" then return tostring(v)
 		elseif vt == "float" or vt == "double" or vt == "int" or vt == "int64" or vt == "number" then return tonumber(v)
 		elseif vt == "BrickColor" then return dt.BrickColor.new(tostring(v))
@@ -97,7 +104,7 @@ return function(env)
 		end
 		local ct = typeof(current)
 		if ct == "number" then return tonumber(v)
-		elseif ct == "boolean" then return if type(v) == "number" then v ~= 0 else not not v
+		elseif ct == "boolean" then return toBoolean(v)
 		elseif ct == "string" then return tostring(v)
 		elseif ct == "EnumItem" then
 			if type(v) == "number" then return current.EnumType:FromValue(v) end

@@ -49,7 +49,8 @@ check(Codec.decode({__t="Instance", ref=7}, nil, nil, resolve), resolved, "decod
 
 -- DECODE: primitive + valueType coercion
 check(Codec.decode("5", "float"), 5, "coerce float")
-check(Codec.decode(1, "bool"), true, "coerce bool")
+check(Codec.decode(1, "bool"), true, "coerce bool from 1")
+check(Codec.decode(0, "bool"), false, "coerce bool from numeric 0 (Lua: 0 is truthy, must be false)")
 check(Codec.decode(123, "string"), "123", "coerce string")
 
 -- DECODE: unknown valueType -> coerce to current property's type
