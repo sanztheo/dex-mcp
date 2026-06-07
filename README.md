@@ -32,6 +32,21 @@ On startup the server prints (to stderr) the local WebSocket URL and a shared to
 | `DEX_MCP_ENABLE_RUN_LUAU` | `true` | Enable `run_luau` |
 | `DEX_MCP_RPC_TIMEOUT_MS` | `15000` | Per-request timeout |
 
-## The bridge
+## The bridge (Roblox side)
 
-The Luau bridge that runs inside the executor is documented in its own plan/spec. It connects to the printed WebSocket URL and answers the RPC protocol in `docs/superpowers/specs/2026-06-07-dex-mcp-design.md` §4.
+The Luau bridge runs inside a script executor and connects back to this server.
+
+1. Start the server: `node dist/index.js`. It prints a loader line.
+2. In your executor (in a game you own / are allowed to inspect), run:
+   ```lua
+   loadstring(game:HttpGet("http://127.0.0.1:<port>/bridge"))()
+   ```
+   The server injects the per-run auth token into the served script automatically.
+3. The bridge connects over WebSocket and answers the MCP tools. It auto-reconnects if the server restarts.
+
+The bridge is assembled on the fly from `bridge/codec.luau`, `bridge/core.luau`, and `bridge/dex-bridge.luau`. The codec and core are unit-tested with [lune](https://lune-ui.dev): `npm run test:bridge`.
+
+### Executor requirements
+- `WebSocket.connect` (UNC/sUNC standard). 
+- `loadstring` for `run_luau`.
+- `hookmetamethod`/`getrawmetatable`/`getnamecallmethod`/`newcclosure` for the remote spy (capability-gated — the bridge degrades gracefully without them).
