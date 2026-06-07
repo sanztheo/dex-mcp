@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Cache (API dump, etc.)
+.cache/
+*.log
+
+# Env / secrets
+.env
+.env.local
+
+# Reference material (third-party DEX Explorer script — not redistributed)
+dex-explorer.txt
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
