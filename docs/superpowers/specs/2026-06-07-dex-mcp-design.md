@@ -62,10 +62,10 @@ Chaque unité a une responsabilité unique, une interface claire, et est testabl
 |---|---|---|---|
 | Entry | `src/index.ts` | Démarre stdio MCP + hub WS, lit la config | config, mcp/server, bridge-hub |
 | MCP server | `src/mcp/server.ts` | Enregistre les outils, mappe outil → RPC | rpc, tools/* |
-| Tools | `src/mcp/tools/*.ts` | Un fichier par groupe (explore, write, remotes, luau, status) | rpc, codec, api-dump |
+| Tools | `src/mcp/tools/*.ts` | Un fichier par groupe (explore, write, remotes, luau, status) | rpc, protocol, api-dump |
 | WS hub | `src/bridge-hub/ws-server.ts` | Accepte le bridge, valide le token, gère la connexion | config |
 | RPC | `src/bridge-hub/rpc.ts` | Corrélation id→promesse, timeout, erreurs | ws-server |
-| Codec | `src/bridge-hub/codec.ts` | Encode/décode les valeurs taggées (côté TS) | — |
+| Protocol | `src/protocol.ts` | Types + schémas Zod des valeurs taggées et du `Node` (validation côté TS) ; l'encode/décode réel est côté bridge Luau | — |
 | API dump | `src/api-dump/{fetch,properties}.ts` | Télécharge/cache le dump, dérive les propriétés par classe | — |
 | Config | `src/config.ts` | Port, token, flags | — |
 | Bridge | `bridge/dex-bridge.luau` | WS, ref tables, dispatch, codec Luau jumeau | — |
@@ -115,7 +115,7 @@ Enveloppe JSON sur WebSocket.
 
 ## 6. Sérialisation des propriétés — codec JSON taggé
 
-Les types Roblox ne sont pas du JSON natif. Codec partagé : `codec.ts` (TS) et un encodeur/décodeur Luau jumeau dans le bridge. Forme : `{ "__t": <type>, …champs }`. Les primitifs (number, string, bool) passent tels quels ; `nil` → `null`.
+Les types Roblox ne sont pas du JSON natif. Codec partagé : les schémas/types côté TS dans `protocol.ts` (validation seulement) et un encodeur/décodeur Luau dans le bridge (qui fait la conversion réelle Roblox ↔ JSON taggé). Forme : `{ "__t": <type>, …champs }`. Les primitifs (number, string, bool) passent tels quels ; `nil` → `null`.
 
 | Type Roblox | Encodage JSON |
 |---|---|
@@ -208,10 +208,10 @@ dex-mcp/
     mcp/
       server.ts
       tools/{status,explore,write,remotes,luau}.ts
+    protocol.ts
     bridge-hub/
       ws-server.ts
       rpc.ts
-      codec.ts
     api-dump/
       fetch.ts
       properties.ts
@@ -219,7 +219,6 @@ dex-mcp/
     dex-bridge.luau
   test/
     mock-bridge.ts        # client WS Node simulant le bridge sur un faux arbre
-    codec.test.ts
     properties.test.ts
     rpc.test.ts
     tools.test.ts         # end-to-end via mock-bridge
@@ -230,7 +229,7 @@ dex-mcp/
 
 **Stratégie de test**
 - **Mock bridge** : un client WS Node qui simule le bridge Luau face à un faux arbre d'instances → teste tous les outils MCP **end-to-end sans Roblox**. La CI tourne sans executor.
-- Unitaires : round-trips du codec (TS), filtrage de propriétés via dump, corrélation/timeout RPC.
+- Unitaires : validation des valeurs taggées (`protocol.ts`, TS), filtrage de propriétés via dump, corrélation/timeout RPC.
 - Bridge Luau : maintenu mince ; codec Luau testé via le CLI `luau` si dispo, sinon validation manuelle documentée.
 
 ## 12. Futur (hors v1)

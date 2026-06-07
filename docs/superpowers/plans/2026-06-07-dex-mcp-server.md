@@ -365,6 +365,8 @@ git commit -m "feat: add configuration loader with feature flags"
 
 ## Task 3: Codec helper (`summarize`)
 
+> **Post-review note (removed):** `summarize` shipped but was never wired into any tool. Per the final code review (Issue 4) it was removed as dead code (YAGNI) along with its test. Tagged-value handling on the TS side lives in `protocol.ts`; the real encode/decode codec is the Luau bridge's job (Plan 2). The task is kept here for execution history.
+
 **Files:**
 - Create: `src/bridge-hub/codec.ts`
 - Test: `test/codec.test.ts`
