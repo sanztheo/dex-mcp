@@ -621,9 +621,9 @@ Expected: FAIL — `module '../core' not found`.
 -- Pure bridge core. Factory takes env { typeof, datatypes, json, game, task, exec, Codec? }.
 -- Returns ref tables, node builder, RPC handlers, and dispatch(raw)->replyString.
 return function(env)
-	local typeof = env.typeof
 	local game = env.game
 	local Codec = env.Codec  -- set by callers before handlers run; ref/node tasks don't touch it
+	-- (the codec, not core, is what reads env.typeof — core never calls typeof directly)
 
 	local Core = {}
 
@@ -1343,9 +1343,15 @@ function read(name: string): string {
   return readFileSync(join(BRIDGE_DIR, name), "utf8");
 }
 
-// Lua long-bracket-safe? We use a plain quoted string for the token; escape backslash and quote.
+// Plain quoted Lua string for the token; escape backslash, quote, and newlines/CR
+// so even an unexpected token value can't break out of the string literal.
 function luaQuote(value: string): string {
-  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  const escaped = value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r");
+  return `"${escaped}"`;
 }
 
 /** Assemble the single Luau payload the executor loads: codec+core inlined, port/token injected. */
