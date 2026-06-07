@@ -1,10 +1,14 @@
 import { WebSocketServer, WebSocket, type RawData } from "ws";
+import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { DexConfig } from "../config.js";
 import { RpcClient } from "./rpc.js";
+import { assembleBridge } from "./bridge-loader.js";
 
 export class BridgeHub {
   private wss?: WebSocketServer;
+  private http?: Server;
+  private port = 0;
   private socket?: WebSocket;
   private rpc?: RpcClient;
 
@@ -15,11 +19,11 @@ export class BridgeHub {
 
   start(): Promise<number> {
     return new Promise((resolve) => {
+      this.http = createServer((req, res) => this.handleHttp(req, res));
       // Reject bad tokens at the HTTP handshake (401) — before the WS upgrade — so a
       // rejected client never fires `open`. (Accept-then-close races `open` before `close`.)
       this.wss = new WebSocketServer({
-        host: "127.0.0.1",
-        port: this.config.port,
+        server: this.http,
         verifyClient: (info, cb) => {
           const url = new URL(info.req.url ?? "", "ws://127.0.0.1");
           if (url.searchParams.get("token") === this.config.token) cb(true);
@@ -27,11 +31,26 @@ export class BridgeHub {
         }
       });
       this.wss.on("connection", (ws) => this.handleConnection(ws));
-      this.wss.on("listening", () => {
-        const address = this.wss!.address() as AddressInfo;
-        resolve(address.port);
+      this.http.listen(this.config.port, "127.0.0.1", () => {
+        this.port = (this.http!.address() as AddressInfo).port;
+        resolve(this.port);
       });
     });
+  }
+
+  // GET /bridge -> the assembled Luau loader (localhost-only; bootstrap, no token required).
+  private handleHttp(req: IncomingMessage, res: ServerResponse): void {
+    const url = new URL(req.url ?? "", "http://127.0.0.1");
+    if (req.method === "GET" && url.pathname === "/bridge") {
+      // inject the LIVE listening port (handles ephemeral port:0; address() is set once listening)
+      const livePort = (this.http?.address() as AddressInfo | null)?.port ?? this.port;
+      const body = assembleBridge(livePort, this.config.token);
+      res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
+      res.end(body);
+      return;
+    }
+    res.writeHead(404, { "content-type": "text/plain" });
+    res.end("not found");
   }
 
   private handleConnection(ws: WebSocket): void {
@@ -66,6 +85,10 @@ export class BridgeHub {
     await new Promise<void>((resolve) => {
       if (!this.wss) return resolve();
       this.wss.close(() => resolve());
+    });
+    await new Promise<void>((resolve) => {
+      if (!this.http) return resolve();
+      this.http.close(() => resolve());
     });
   }
 }
