@@ -36,7 +36,9 @@ describe("BridgeHub", () => {
   it("rejects a connection with a bad token", async () => {
     hub = new BridgeHub(baseConfig);
     const port = await hub.start();
-    await expect(connect(port, "wrong")).rejects.toThrow(/closed 1008/);
+    // Bad token is rejected at the HTTP handshake (verifyClient → 401), so the
+    // client never opens; it errors. (Accept-then-close races `open` before `close`.)
+    await expect(connect(port, "wrong")).rejects.toThrow(/401|unexpected server response/i);
   });
 
   it("throws when requesting while no bridge is connected", async () => {

@@ -1,10 +1,7 @@
 import { WebSocketServer, WebSocket, type RawData } from "ws";
-import type { IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { DexConfig } from "../config.js";
 import { RpcClient } from "./rpc.js";
-
-const BAD_TOKEN_CLOSE_CODE = 1008;
 
 export class BridgeHub {
   private wss?: WebSocketServer;
@@ -18,8 +15,18 @@ export class BridgeHub {
 
   start(): Promise<number> {
     return new Promise((resolve) => {
-      this.wss = new WebSocketServer({ host: "127.0.0.1", port: this.config.port });
-      this.wss.on("connection", (ws, req) => this.handleConnection(ws, req));
+      // Reject bad tokens at the HTTP handshake (401) — before the WS upgrade — so a
+      // rejected client never fires `open`. (Accept-then-close races `open` before `close`.)
+      this.wss = new WebSocketServer({
+        host: "127.0.0.1",
+        port: this.config.port,
+        verifyClient: (info, cb) => {
+          const url = new URL(info.req.url ?? "", "ws://127.0.0.1");
+          if (url.searchParams.get("token") === this.config.token) cb(true);
+          else cb(false, 401, "invalid token");
+        }
+      });
+      this.wss.on("connection", (ws) => this.handleConnection(ws));
       this.wss.on("listening", () => {
         const address = this.wss!.address() as AddressInfo;
         resolve(address.port);
@@ -27,18 +34,13 @@ export class BridgeHub {
     });
   }
 
-  private handleConnection(ws: WebSocket, req: IncomingMessage): void {
-    const url = new URL(req.url ?? "", "ws://127.0.0.1");
-    if (url.searchParams.get("token") !== this.config.token) {
-      ws.close(BAD_TOKEN_CLOSE_CODE, "invalid token");
-      return;
-    }
-    // v1 single-bridge: a new connection replaces the old one.
+  private handleConnection(ws: WebSocket): void {
+    // Token already verified at handshake. v1 single-bridge: a new connection replaces the old one.
     this.socket?.close();
     this.socket = ws;
     this.rpc = new RpcClient((msg) => ws.send(msg), {
       timeoutMs: this.config.rpcTimeoutMs,
-      onEvent: this.onEvent,
+      onEvent: this.onEvent
     });
     ws.on("message", (data: RawData) => this.rpc?.handleMessage(data.toString()));
     ws.on("close", () => {
