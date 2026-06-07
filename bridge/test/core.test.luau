@@ -28,4 +28,76 @@ check(node.className, "Workspace", "node className")
 check(node.path, "game.Workspace", "node path")
 check(node.childCount, 2, "node childCount is number")
 
+-- wire a codec into the env for the handler tests
+local makeCodec = require("../codec")
+local env2 = Stubs.makeEnv()
+env2.Codec = makeCodec(env2)
+local core2 = makeCore(env2)
+local game2 = env2.game
+
+-- helper: call dispatch with a request, decode the reply
+local function call(method, params)
+	local raw = env2.json.encode({ id = 1, method = method, params = params })
+	return env2.json.decode(core2.dispatch(raw))
+end
+
+-- status
+local s = call("status", {})
+check(s.ok, true, "status ok")
+check(s.result.gameName ~= nil, true, "status has gameName")
+check(type(s.result.capabilities), "table", "status capabilities table")
+
+-- getRoot: node ref 0 + services as BARE array of nodes
+local root = call("getRoot", {})
+check(root.result.node.ref, 0, "root ref 0")
+check(root.result.node.className, "DataModel", "root className")
+check(#root.result.services >= 2, true, "root services array")
+
+-- getChildren: BARE Node[] (no wrapper)
+local wsRef = root.result.services[1].ref
+local children = call("getChildren", { ref = wsRef })
+check(children.result[1] ~= nil, true, "getChildren bare array")
+
+-- search: BARE Node[], name substring
+local found = call("search", { query = "part" })
+check(found.result[1].name, "Part", "search finds Part")
+
+-- getByPath: BARE single node
+local byPath = call("getByPath", { path = "game.Workspace.Part" })
+check(byPath.result.name, "Part", "getByPath bare node")
+
+-- getSource: ModuleScript Logic has source; Workspace does not -> error
+local rsRef = root.result.services[2].ref
+local logic = call("getChildren", { ref = rsRef })
+local logicNode
+for _, n in logic.result do if n.className == "ModuleScript" then logicNode = n end end
+local src = call("getSource", { ref = logicNode.ref })
+check(src.result.source, "return {}", "getSource ok")
+local noSrc = call("getSource", { ref = wsRef })
+check(noSrc.ok, false, "getSource error path")
+
+-- unknown method -> error reply with id
+local unk = call("frobnicate", {})
+check(unk.ok, false, "unknown method error")
+check(unk.id, 1, "error reply echoes id")
+
+-- dispatch strips Lua's "chunk:line:" prefix so errors byte-match the frozen mock strings
+check(unk.error, "unknown method frobnicate", "exact unknown-method string")
+check(call("getByPath", { path = "game.Nope" }).error, "path not found: game.Nope", "exact path-not-found")
+check(call("getProperties", { ref = 99999 }).error, "stale ref 99999", "exact stale-ref (prefix stripped)")
+
+-- search honors maxDepth (only direct children of root) and rootRef (scoped subtree)
+local shallow = call("search", { query = "", maxDepth = 1 })
+local sn = {}
+for _, n in shallow.result do sn[n.name] = true end
+check(sn["Workspace"] == true and sn["Part"] == nil, true, "maxDepth=1 excludes deep Part")
+local scoped = call("search", { query = "part", rootRef = root.result.services[1].ref })
+check(scoped.result[1].name, "Part", "rootRef scopes search to Workspace")
+
+-- getProperties on a Folder (not in CLASS_PROPS): UNIVERSAL fallback, non-empty map
+local folder = call("getByPath", { path = "game.Workspace.Stuff" })
+local fprops = call("getProperties", { ref = folder.result.ref })
+check(fprops.result.properties.Name, "Stuff", "folder fallback includes Name")
+check(fprops.result.properties.ClassName, "Folder", "folder fallback includes ClassName")
+
 return checks
