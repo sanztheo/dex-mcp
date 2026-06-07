@@ -100,4 +100,21 @@ local fprops = call("getProperties", { ref = folder.result.ref })
 check(fprops.result.properties.Name, "Stuff", "folder fallback includes Name")
 check(fprops.result.properties.ClassName, "Folder", "folder fallback includes ClassName")
 
+-- setProperty: decode + assign + {ok=true}
+local partByPath = call("getByPath", { path = "game.Workspace.Part" })
+local setRes = call("setProperty", { ref = partByPath.result.ref, name = "Name", value = "Renamed" })
+check(setRes.result.ok, true, "setProperty ok=true")
+
+-- fireRemote on the Buy RemoteEvent -> {ok=true}; mock-equivalent shape
+local rsNode = call("getByPath", { path = "game.ReplicatedStorage" })
+local buy = call("getChildren", { ref = rsNode.result.ref, classFilter = "RemoteEvent" })
+local fired = call("fireRemote", { ref = buy.result[1].ref, args = {} })
+check(fired.result.ok, true, "fireRemote ok=true")
+
+-- invokeRemote on the Ping RemoteFunction (stub InvokeServer returns itself) -> {result=tagged Instance}
+local ping = call("getChildren", { ref = rsNode.result.ref, classFilter = "RemoteFunction" })
+local inv = call("invokeRemote", { ref = ping.result[1].ref, args = {} })
+check(inv.result.result.__t, "Instance", "invokeRemote return is codec-encoded")
+check(inv.result.result.class, "RemoteFunction", "invoke result Instance uses field `class`, not className")
+
 return checks

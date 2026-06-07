@@ -193,6 +193,34 @@ return function(env)
 		return { source = src }
 	end
 
+	function Handlers.setProperty(params)
+		local inst = resolve(params.ref)
+		local okCur, current = readProp(inst, params.name)
+		local decoded = Codec.decode(params.value, params.valueType, okCur and current or nil, resolve)
+		;(inst :: any)[params.name] = decoded
+		return { ok = true }
+	end
+
+	local function decodeArgs(args)
+		local out = {}
+		for i, a in (args or {}) do out[i] = Codec.decode(a, nil, nil, resolve) end
+		return out
+	end
+
+	function Handlers.fireRemote(params)
+		local inst = resolve(params.ref)
+		assert(inst:IsA("RemoteEvent"), "fire_remote expects a RemoteEvent")
+		inst:FireServer(table.unpack(decodeArgs(params.args)))
+		return { ok = true }
+	end
+
+	function Handlers.invokeRemote(params)
+		local inst = resolve(params.ref)
+		assert(inst:IsA("RemoteFunction"), "invoke_remote expects a RemoteFunction")
+		local res = inst:InvokeServer(table.unpack(decodeArgs(params.args)))
+		return { result = encodeValue(res) }  -- Instance returns use field `class`
+	end
+
 	-- ---- dispatch: {id,method,params} -> reply string ------------------
 	Core.Handlers = Handlers
 	function Core.dispatch(raw)

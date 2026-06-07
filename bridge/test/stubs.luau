@@ -115,8 +115,13 @@ local function makeInstance(name: string, className: string, props: {[string]: a
 		while cur do table.insert(trail, 1, cur.Name); cur = cur.Parent end
 		return table.concat(trail, ".")
 	end
-	-- property access via index: core reads inst[name]; back it with _props + intrinsics
-	return setmetatable(inst, { __index = function(_, k) return inst._props[k] end })
+	if className == "RemoteEvent" then inst.FireServer = function() end end
+	if className == "RemoteFunction" then inst.InvokeServer = function(_, ...) return inst end end
+	-- writable properties
+	return setmetatable(inst, {
+		__index = function(_, k) return inst._props[k] end,
+		__newindex = function(_, k, v) inst._props[k] = v end,
+	})
 end
 
 local function addChild(parent, child) child.Parent = parent; table.insert(parent._children, child) end
