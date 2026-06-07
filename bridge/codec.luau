@@ -53,9 +53,57 @@ return function(env)
 		end
 	end
 
-	-- decode implemented in Task 2.
-	function Codec.decode(_v: any, _valueType: string?, _current: any, _resolve: ((number) -> any)?): any
-		error("decode not implemented")
+	local function decodeTagged(v: any): any
+		local tag = v.__t
+		if tag == "Vector3" then return dt.Vector3.new(v.x, v.y, v.z)
+		elseif tag == "Vector2" then return dt.Vector2.new(v.x, v.y)
+		elseif tag == "CFrame" then return dt.CFrame.new(table.unpack(v.components))
+		elseif tag == "Color3" then return dt.Color3.new(v.r, v.g, v.b) -- 0..1, NOT fromRGB
+		elseif tag == "BrickColor" then return dt.BrickColor.new(v.name)
+		elseif tag == "UDim" then return dt.UDim.new(v.scale, v.offset)
+		elseif tag == "UDim2" then return dt.UDim2.new(v.x.scale, v.x.offset, v.y.scale, v.y.offset)
+		elseif tag == "EnumItem" then
+			-- prefer by NAME (stable across Roblox version bumps where numeric Values shift);
+			-- FromValue is the fallback only when name is absent.
+			local e = (dt.Enum :: any)[v.enum]
+			if v.name ~= nil then return e[v.name] else return e:FromValue(v.value) end
+		else
+			error("cannot decode tag " .. tostring(tag))
+		end
+	end
+
+	local function coerceByValueType(v: any, vt: string, current: any): any
+		if vt == "bool" then return not not v
+		elseif vt == "string" or vt == "Content" or vt == "ContentId" then return tostring(v)
+		elseif vt == "float" or vt == "double" or vt == "int" or vt == "int64" or vt == "number" then return tonumber(v)
+		elseif vt == "BrickColor" then return dt.BrickColor.new(tostring(v))
+		elseif vt == "Enum" and typeof(current) == "EnumItem" then
+			if type(v) == "number" then return current.EnumType:FromValue(v) end
+			return (current.EnumType :: any)[tostring(v)]
+		end
+		return v
+	end
+
+	function Codec.decode(v: any, valueType: string?, current: any, resolve: ((number) -> any)?): any
+		if type(v) == "table" and v.__t ~= nil then
+			if v.__t == "Instance" then
+				if not resolve then error("instance decode needs a resolver") end
+				return resolve(v.ref)
+			end
+			return decodeTagged(v)
+		end
+		if valueType ~= nil and valueType ~= "unknown" then
+			return coerceByValueType(v, valueType, current)
+		end
+		local ct = typeof(current)
+		if ct == "number" then return tonumber(v)
+		elseif ct == "boolean" then return if type(v) == "number" then v ~= 0 else not not v
+		elseif ct == "string" then return tostring(v)
+		elseif ct == "EnumItem" then
+			if type(v) == "number" then return current.EnumType:FromValue(v) end
+			return (current.EnumType :: any)[tostring(v)]
+		end
+		return v
 	end
 
 	return Codec
