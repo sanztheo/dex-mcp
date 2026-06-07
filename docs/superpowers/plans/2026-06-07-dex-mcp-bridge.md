@@ -83,6 +83,7 @@ local Stubs = {}
 
 -- ---- deep equality + assertions ----------------------------------------
 local function deepEqual(a: any, b: any): boolean
+	if a == b then return true end  -- identity shortcut: same reference, and breaks cyclic Instance trees
 	if type(a) ~= type(b) then return false end
 	if type(a) ~= "table" then return a == b end
 	for k, v in pairs(a) do if not deepEqual(v, b[k]) then return false end end
@@ -411,7 +412,8 @@ check(Codec.decode({__t="Instance", ref=7}, nil, nil, resolve), resolved, "decod
 
 -- DECODE: primitive + valueType coercion
 check(Codec.decode("5", "float"), 5, "coerce float")
-check(Codec.decode(1, "bool"), true, "coerce bool")
+check(Codec.decode(1, "bool"), true, "coerce bool from 1")
+check(Codec.decode(0, "bool"), false, "coerce bool from numeric 0 (Lua: 0 is truthy, must be false)")
 check(Codec.decode(123, "string"), "123", "coerce string")
 
 -- DECODE: unknown valueType -> coerce to current property's type
@@ -446,8 +448,15 @@ Expected: FAIL — `decode not implemented`.
 		end
 	end
 
+	-- Lua truthiness differs from JS: 0 / "" / NaN are all truthy (only nil/false are falsy).
+	-- For property coercion a numeric 0 must mean false, so don't use `not not v` on numbers.
+	local function toBoolean(v: any): boolean
+		if type(v) == "number" then return v ~= 0 end
+		return not not v
+	end
+
 	local function coerceByValueType(v: any, vt: string, current: any): any
-		if vt == "bool" then return not not v
+		if vt == "bool" then return toBoolean(v)
 		elseif vt == "string" or vt == "Content" or vt == "ContentId" then return tostring(v)
 		elseif vt == "float" or vt == "double" or vt == "int" or vt == "int64" or vt == "number" then return tonumber(v)
 		elseif vt == "BrickColor" then return dt.BrickColor.new(tostring(v))
@@ -471,7 +480,7 @@ Expected: FAIL — `decode not implemented`.
 		end
 		local ct = typeof(current)
 		if ct == "number" then return tonumber(v)
-		elseif ct == "boolean" then return not not v
+		elseif ct == "boolean" then return toBoolean(v)
 		elseif ct == "string" then return tostring(v)
 		elseif ct == "EnumItem" then
 			if type(v) == "number" then return current.EnumType:FromValue(v) end
@@ -595,7 +604,7 @@ local node = core.buildNode(ws)
 check(node.name, "Workspace", "node name")
 check(node.className, "Workspace", "node className")
 check(node.path, "game.Workspace", "node path")
-check(node.childCount, 1, "node childCount is number")
+check(node.childCount, 2, "node childCount is number")  -- Workspace has Part + Stuff (Folder)
 
 return checks
 ```
@@ -1353,6 +1362,8 @@ export function assembleBridge(port: number, token: string): string {
 ```
 
 > Note the token replacement targets the QUOTED placeholder `"__DEX_TOKEN__"` in the glue and replaces it with a freshly-quoted (escaped) Lua string, so a token with special chars can't break out. The default token is 32 hex chars (safe), but escaping is defense-in-depth.
+
+> **Gotcha (must handle):** `dex-bridge.luau`'s header comment documents the markers and therefore contains the literal strings `__DEX_MAKECODEC__`/`__DEX_MAKECORE__`. A naive `String.replace("__DEX_MAKECODEC__", ...)` matches the COMMENT first and leaves the real (standalone-line) marker unreplaced → invalid assembled Luau. `assembleBridge` must (a) strip the marker-documentation comment block before substituting, and (b) match the standalone markers line-anchored (`/^__DEX_MAKECODEC__$/m`). The Task 9 Step 5 compile-check (`@lune/luau.load`) is what catches a regression here.
 
 - [ ] **Step 4: Run to verify it passes**
 
