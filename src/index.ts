@@ -14,9 +14,12 @@ async function main(): Promise<void> {
 
   // IMPORTANT: stdout is the MCP channel — all human-facing logging goes to stderr.
   const bridgeUrl = `ws://127.0.0.1:${port}?token=${config.token}`;
-  process.stderr.write(`[dex-mcp] WebSocket hub on ${bridgeUrl}\n`);
-  process.stderr.write(`[dex-mcp] Paste the bridge script into your executor and point it at this URL.\n`);
+  process.stderr.write(`[dex-mcp] WebSocket hub + bridge loader on http://127.0.0.1:${port}\n`);
+  process.stderr.write(`[dex-mcp] In your executor, run:\n`);
+  process.stderr.write(`[dex-mcp]   loadstring(game:HttpGet("http://127.0.0.1:${port}/bridge"))()\n`);
+  process.stderr.write(`[dex-mcp] (WebSocket auth token: ${config.token})\n`);
   process.stderr.write(`[dex-mcp] API dump: ${dump ? "loaded" : "unavailable (bridge returns its curated property set)"}\n`);
+  void bridgeUrl;
 
   const session = new Session(hub, config, dump);
   const server = buildServer(session);
