@@ -624,7 +624,9 @@ describe("BridgeHub", () => {
   it("rejects a connection with a bad token", async () => {
     hub = new BridgeHub(baseConfig);
     const port = await hub.start();
-    await expect(connect(port, "wrong")).rejects.toThrow(/closed 1008/);
+    // Bad token is rejected at the HTTP handshake (verifyClient → 401), so the
+    // client never opens; it errors. (Accept-then-close races `open` before `close`.)
+    await expect(connect(port, "wrong")).rejects.toThrow(/401|unexpected server response/i);
   });
 
   it("throws when requesting while no bridge is connected", async () => {
@@ -644,12 +646,9 @@ Expected: FAIL — cannot find module `../src/bridge-hub/ws-server.js`.
 
 ```ts
 import { WebSocketServer, WebSocket, type RawData } from "ws";
-import type { IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { DexConfig } from "../config.js";
 import { RpcClient } from "./rpc.js";
-
-const BAD_TOKEN_CLOSE_CODE = 1008;
 
 export class BridgeHub {
   private wss?: WebSocketServer;
@@ -663,8 +662,18 @@ export class BridgeHub {
 
   start(): Promise<number> {
     return new Promise((resolve) => {
-      this.wss = new WebSocketServer({ host: "127.0.0.1", port: this.config.port });
-      this.wss.on("connection", (ws, req) => this.handleConnection(ws, req));
+      // Reject bad tokens at the HTTP handshake (401) — before the WS upgrade — so a
+      // rejected client never fires `open`. (Accept-then-close races `open` before `close`.)
+      this.wss = new WebSocketServer({
+        host: "127.0.0.1",
+        port: this.config.port,
+        verifyClient: (info, cb) => {
+          const url = new URL(info.req.url ?? "", "ws://127.0.0.1");
+          if (url.searchParams.get("token") === this.config.token) cb(true);
+          else cb(false, 401, "invalid token");
+        }
+      });
+      this.wss.on("connection", (ws) => this.handleConnection(ws));
       this.wss.on("listening", () => {
         const address = this.wss!.address() as AddressInfo;
         resolve(address.port);
@@ -672,13 +681,8 @@ export class BridgeHub {
     });
   }
 
-  private handleConnection(ws: WebSocket, req: IncomingMessage): void {
-    const url = new URL(req.url ?? "", "ws://127.0.0.1");
-    if (url.searchParams.get("token") !== this.config.token) {
-      ws.close(BAD_TOKEN_CLOSE_CODE, "invalid token");
-      return;
-    }
-    // v1 single-bridge: a new connection replaces the old one.
+  private handleConnection(ws: WebSocket): void {
+    // Token already verified at handshake. v1 single-bridge: a new connection replaces the old one.
     this.socket?.close();
     this.socket = ws;
     this.rpc = new RpcClient((msg) => ws.send(msg), {
@@ -1237,7 +1241,8 @@ export class Session {
     readonly dump: ApiDump | undefined
   ) {}
 
-  callBridge(method: string, params: Record<string, unknown>): Promise<unknown> {
+  // async so a synchronous "bridge not connected" throw from hub.request surfaces as a rejected promise
+  async callBridge(method: string, params: Record<string, unknown>): Promise<unknown> {
     return this.hub.request(method, params);
   }
 
@@ -1347,8 +1352,11 @@ import type { z } from "zod";
 
 export interface ToolResult {
   content: Array<{ type: "text"; text: string }>;
-  structuredContent?: unknown;
+  structuredContent?: Record<string, unknown>;
   isError?: boolean;
+  // The SDK's CallToolResult is a "loose" Zod schema with an index signature;
+  // match it so our handlers are assignable to registerTool's callback type.
+  [x: string]: unknown;
 }
 
 export interface ToolDef {
@@ -1359,7 +1367,7 @@ export interface ToolDef {
 }
 
 export function ok(structured: unknown): ToolResult {
-  return { content: [{ type: "text", text: JSON.stringify(structured, null, 2) }], structuredContent: structured };
+  return { content: [{ type: "text", text: JSON.stringify(structured, null, 2) }], structuredContent: structured as Record<string, unknown> };
 }
 
 export function fail(message: string): ToolResult {
