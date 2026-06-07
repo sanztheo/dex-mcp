@@ -15,6 +15,9 @@ build/
 # Reference material (third-party DEX Explorer script — not redistributed)
 dex-explorer.txt
 
+# Local dev notes (not part of the published package)
+tasks/
+
 # OS / editor
 .DS_Store
 Thumbs.db
