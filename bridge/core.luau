@@ -221,6 +221,76 @@ return function(env)
 		return { result = encodeValue(res) }  -- Instance returns use field `class`
 	end
 
+	-- ---- runLuau (executor loadstring + scoped print capture) ----------
+	function Handlers.runLuau(params)
+		local exec = env.exec or {}
+		if type(exec.loadstring) ~= "function" then error("run_luau unsupported (no loadstring)") end
+		local chunk, compileErr = exec.loadstring(params.code)
+		if not chunk then return { output = tostring(compileErr) } end
+		local buf = {}
+		local function capture(...)
+			local parts = {}
+			for i = 1, select("#", ...) do parts[i] = tostring((select(i, ...))) end
+			table.insert(buf, table.concat(parts, "\t"))
+		end
+		if exec.setfenv then
+			local base = (exec.getgenv and exec.getgenv()) or {}
+			exec.setfenv(chunk, setmetatable({ print = capture, warn = capture }, { __index = base }))
+		end
+		local ok, ret = pcall(chunk)
+		if not ok then table.insert(buf, "error: " .. tostring(ret)) end
+		local result = { output = table.concat(buf, "\n") }
+		if ok and ret ~= nil then result.returned = encodeValue(ret) end  -- primitives pass through raw
+		return result
+	end
+
+	-- ---- remote spy (capability-gated; buffer + dump) ------------------
+	local Spy = { active = false, buffer = {} }
+	local function spyCapable()
+		local e = env.exec or {}
+		return type(e.hookmetamethod) == "function"
+			and type(e.getrawmetatable) == "function"
+			and type(e.getnamecallmethod) == "function"
+			and type(e.newcclosure) == "function"
+	end
+
+	function Handlers.remoteSpyStart(_params)
+		if not spyCapable() then error("remote spy unsupported by this executor") end
+		if Spy.active then return { ok = true } end
+		Spy.active = true
+		local exec = env.exec
+		local original
+		original = exec.hookmetamethod(game, "__namecall", exec.newcclosure(function(self, ...)
+			local method = exec.getnamecallmethod()
+			if Spy.active and (method == "FireServer" or method == "InvokeServer") then
+				-- read ClassName by DOT-INDEX (NOT a method) to avoid re-entering __namecall
+				local okCls, cls = pcall(function() return self.ClassName end)
+				if okCls and (cls == "RemoteEvent" or cls == "RemoteFunction") then
+					-- store the raw instance; resolve path at DUMP time (outside the hook)
+					table.insert(Spy.buffer, { instance = self, method = method, rawArgs = { ... } })
+				end
+			end
+			return original(self, ...)  -- ALWAYS forward
+		end))
+		return { ok = true }
+	end
+
+	function Handlers.remoteSpyStop(_params)
+		Spy.active = false  -- cannot cleanly unhook; gate via flag
+		return { ok = true }
+	end
+
+	function Handlers.remoteSpyDump(_params)
+		local entries = {}
+		for _, e in Spy.buffer do
+			local args = {}
+			for i, a in e.rawArgs do args[i] = encodeValue(a) end
+			table.insert(entries, { remote = dotPath(e.instance), args = args, method = e.method })
+		end
+		Spy.buffer = {}
+		return { entries = entries }
+	end
+
 	-- ---- dispatch: {id,method,params} -> reply string ------------------
 	Core.Handlers = Handlers
 	function Core.dispatch(raw)

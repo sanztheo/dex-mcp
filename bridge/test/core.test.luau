@@ -117,4 +117,22 @@ local inv = call("invokeRemote", { ref = ping.result[1].ref, args = {} })
 check(inv.result.result.__t, "Instance", "invokeRemote return is codec-encoded")
 check(inv.result.result.class, "RemoteFunction", "invoke result Instance uses field `class`, not className")
 
+-- remote spy hard-errors when executor capabilities are absent (env.exec is empty in tests)
+local spy = call("remoteSpyStart", {})
+check(spy.ok, false, "remoteSpyStart unsupported -> error")
+check(spy.error, "remote spy unsupported by this executor", "spy unsupported exact wording (prefix stripped by dispatch)")
+
+-- remoteSpyDump returns {entries=...} even before any capture (empty)
+local dump = call("remoteSpyDump", {})
+check(type(dump.result.entries), "table", "dump entries table")
+
+-- runLuau compile error -> {output=<err>} via a stub loadstring
+local env3 = Stubs.makeEnv()
+env3.Codec = require("../codec")(env3)
+env3.exec = { loadstring = function(code) return nil, "syntax error near X" end }
+local core3 = makeCore(env3)
+local raw = env3.json.encode({ id = 9, method = "runLuau", params = { code = "bad(" } })
+local rl = env3.json.decode(core3.dispatch(raw))
+check(rl.result.output, "syntax error near X", "runLuau compile error output")
+
 return checks
