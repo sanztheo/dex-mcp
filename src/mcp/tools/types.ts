@@ -1,8 +1,9 @@
 import type { z } from "zod";
 
 export interface ToolResult {
+  [x: string]: unknown;
   content: Array<{ type: "text"; text: string }>;
-  structuredContent?: unknown;
+  structuredContent?: Record<string, unknown>;
   isError?: boolean;
 }
 
@@ -14,7 +15,10 @@ export interface ToolDef {
 }
 
 export function ok(structured: unknown): ToolResult {
-  return { content: [{ type: "text", text: JSON.stringify(structured, null, 2) }], structuredContent: structured };
+  return {
+    content: [{ type: "text", text: JSON.stringify(structured, null, 2) }],
+    structuredContent: structured as Record<string, unknown>
+  };
 }
 
 export function fail(message: string): ToolResult {
