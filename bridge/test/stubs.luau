@@ -7,6 +7,7 @@ local Stubs = {}
 
 -- ---- deep equality + assertions ----------------------------------------
 local function deepEqual(a: any, b: any): boolean
+	if a == b then return true end
 	if type(a) ~= type(b) then return false end
 	if type(a) ~= "table" then return a == b end
 	for k, v in pairs(a) do if not deepEqual(v, b[k]) then return false end end
