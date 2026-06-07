@@ -2,7 +2,6 @@
 -- Pure bridge core. Factory takes env { typeof, datatypes, json, game, task, exec, Codec? }.
 -- Returns ref tables, node builder, RPC handlers, and dispatch(raw)->replyString.
 return function(env)
-	local typeof = env.typeof
 	local game = env.game
 	local Codec = env.Codec  -- set by callers before handlers run; ref/node tasks don't touch it
 
@@ -312,7 +311,6 @@ return function(env)
 		return env.json.encode({ id = msg.id, ok = false, error = message })
 	end
 
-	-- handlers + dispatch added in later tasks.
 	Core._internal = { refToInstance = refToInstance, instanceToRef = instanceToRef }
 	return Core
 end

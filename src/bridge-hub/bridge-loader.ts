@@ -10,9 +10,15 @@ function read(name: string): string {
   return readFileSync(join(BRIDGE_DIR, name), "utf8");
 }
 
-// Lua long-bracket-safe? We use a plain quoted string for the token; escape backslash and quote.
+// Lua long-bracket-safe? We use a plain quoted string for the token; escape backslash, quote,
+// and control chars (defense-in-depth: tokens shouldn't contain these, but harden anyway).
 function luaQuote(value: string): string {
-  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  const escaped = value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r");
+  return `"${escaped}"`;
 }
 
 /** Assemble the single Luau payload the executor loads: codec+core inlined, port/token injected. */
