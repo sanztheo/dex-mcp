@@ -16,7 +16,7 @@ async function main(): Promise<void> {
   const bridgeUrl = `ws://127.0.0.1:${port}?token=${config.token}`;
   process.stderr.write(`[dex-mcp] WebSocket hub on ${bridgeUrl}\n`);
   process.stderr.write(`[dex-mcp] Paste the bridge script into your executor and point it at this URL.\n`);
-  process.stderr.write(`[dex-mcp] API dump: ${dump ? "loaded" : "unavailable (using curated fallback)"}\n`);
+  process.stderr.write(`[dex-mcp] API dump: ${dump ? "loaded" : "unavailable (bridge returns its curated property set)"}\n`);
 
   const session = new Session(hub, config, dump);
   const server = buildServer(session);

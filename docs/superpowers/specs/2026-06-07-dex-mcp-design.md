@@ -143,7 +143,7 @@ Les types Roblox ne sont pas du JSON natif. Codec partagé : `codec.ts` (TS) et 
   1. Le serveur maintient un cache `ref → className` (rempli depuis chaque `node` retourné par get_root/get_children/search).
   2. Cache hit + dump dispo → le serveur envoie `getProperties{ref, propertyNames}` (liste dérivée du dump) en **un aller-retour**.
   3. Cache miss → un aller-retour `getProperties{ref}` (sans noms) qui renvoie `className` + set curé de fallback ; puis enrichissement via dump si souhaité.
-- **Fallback** (dump indisponible) : set curé bundlé dans le package (propriétés universelles : Name, ClassName, Parent ; + propriétés courantes par classe : Part, Model, Script, GuiObject…). Dégradation propre, jamais d'échec dur.
+- **Fallback** (dump indisponible) : le set curé vit **côté bridge**, pas dans le package serveur. C'est le bridge qui lit les propriétés ; appelé sans `propertyNames`, il renvoie son set curé par classe (propriétés universelles : Name, ClassName, Parent ; + propriétés courantes par classe : Part, Model, Script, GuiObject…). Le serveur, sans dump, relaie simplement ce résultat. Dégradation propre, jamais d'échec dur.
 
 ## 8. Surface d'outils MCP (v1)
 
