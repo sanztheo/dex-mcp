@@ -110,15 +110,16 @@ export class BridgeHub {
       return;
     }
 
-    // /mcp -> MCP Streamable HTTP transport (remote mode only). Token-gated: this endpoint runs
-    // arbitrary Luau in the game client.
+    // /mcp -> MCP Streamable HTTP transport (httpMode only). Open on a loopback bind (same trust
+    // model as /bridge — only local processes reach it); token-gated on a public bind because this
+    // endpoint runs arbitrary Luau in the game client.
     if (url.pathname === "/mcp") {
       if (!this.mcpHandler) {
         res.writeHead(404, { "content-type": "text/plain" });
         res.end("mcp endpoint disabled (local stdio mode)");
         return;
       }
-      if (!this.tokenOk(url, req)) {
+      if (!this.isLoopbackBind() && !this.tokenOk(url, req)) {
         res.writeHead(401, { "content-type": "text/plain" });
         res.end("invalid token");
         return;
