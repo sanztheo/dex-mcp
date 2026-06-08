@@ -12,7 +12,9 @@ __DEX_MAKECORE__
 
 local WS_BASE = "__DEX_WS_BASE__"
 local TOKEN = "__DEX_TOKEN__"
-local URL = WS_BASE .. "?token=" .. TOKEN
+-- Path slash before the query is REQUIRED: some executors (Solara) drop a query string when the
+-- URL has no path, sending an empty token -> 401. `ws://host:port/?token=...` is parsed correctly.
+local URL = WS_BASE .. "/?token=" .. TOKEN
 local RECONNECT_DELAY = 3
 
 local HttpService = game:GetService("HttpService")

@@ -13,6 +13,7 @@ export class BridgeHub {
   private wss?: WebSocketServer;
   private http?: Server;
   private port = 0;
+  private boundHost = "127.0.0.1";
   private socket?: WebSocket;
   private rpc?: RpcClient;
   private mcpHandler?: McpHandler;
@@ -47,9 +48,11 @@ export class BridgeHub {
         }
       });
       this.wss.on("connection", (ws) => this.handleConnection(ws));
-      // Remote mode must bind 0.0.0.0 so the platform router (Railway) can reach it; local mode
-      // stays on loopback so the hub is never exposed beyond the machine running the executor.
-      const host = this.config.httpMode ? "0.0.0.0" : "127.0.0.1";
+      // DEX_MCP_HOST wins; else remote mode binds 0.0.0.0 (platform router must reach it) and local
+      // mode stays on loopback. An always-on LOCAL httpMode server sets DEX_MCP_HOST=127.0.0.1 to
+      // get HTTP MCP without exposing the hub beyond the machine.
+      const host = this.config.host ?? (this.config.httpMode ? "0.0.0.0" : "127.0.0.1");
+      this.boundHost = host;
       this.http.listen(this.config.port, host, () => {
         this.port = (this.http!.address() as AddressInfo).port;
         resolve(this.port);
@@ -62,13 +65,17 @@ export class BridgeHub {
     return (this.http?.address() as AddressInfo | null)?.port ?? this.port;
   }
 
-  // The WebSocket origin the served bridge should dial back to. Behind Railway's TLS proxy the
-  // public scheme is wss on 443 (Host header carries the public domain); locally it's loopback.
+  private isLoopbackBind(): boolean {
+    return this.boundHost === "127.0.0.1" || this.boundHost === "localhost" || this.boundHost === "::1";
+  }
+
+  // The WebSocket origin the served bridge should dial back to. Use wss only when a TLS proxy
+  // terminated upstream (Railway sets x-forwarded-proto=https); a direct/loopback bind is plain ws.
   private wsBase(req: IncomingMessage): string {
     if (!this.config.httpMode) return `ws://127.0.0.1:${this.livePort()}`;
     const host = req.headers.host ?? `127.0.0.1:${this.livePort()}`;
     const forwarded = (req.headers["x-forwarded-proto"] ?? "").toString().split(",")[0].trim();
-    const scheme = forwarded === "http" ? "ws" : "wss";
+    const scheme = forwarded === "https" || forwarded === "wss" ? "wss" : "ws";
     return `${scheme}://${host}`;
   }
 
@@ -89,10 +96,10 @@ export class BridgeHub {
       return;
     }
 
-    // GET /bridge -> assembled Luau loader. Open on loopback (bootstrap); token-gated in remote
-    // mode because the payload embeds the shared token — a public /bridge would leak it.
+    // GET /bridge -> assembled Luau loader. Open on a loopback bind (safe bootstrap); token-gated
+    // on a public bind because the payload embeds the shared token — a public /bridge would leak it.
     if (req.method === "GET" && url.pathname === "/bridge") {
-      if (this.config.httpMode && !this.tokenOk(url, req)) {
+      if (!this.isLoopbackBind() && !this.tokenOk(url, req)) {
         res.writeHead(401, { "content-type": "text/plain" });
         res.end("invalid token");
         return;

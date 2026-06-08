@@ -10,6 +10,9 @@ export interface DexConfig {
   // Remote (Railway) mode: bind 0.0.0.0, serve MCP over HTTP at /mcp, point the
   // bridge at wss://<host>. Absent/false => local mode (127.0.0.1 + stdio MCP).
   httpMode?: boolean;
+  // Explicit bind interface (DEX_MCP_HOST). Lets httpMode run on loopback for an always-on
+  // LOCAL server (127.0.0.1) instead of the public 0.0.0.0 default. Absent => mode default.
+  host?: string;
 }
 
 const DEFAULT_PORT = 8392;
@@ -35,5 +38,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): DexConfig {
     enableRunLuau: parseBool(env.DEX_MCP_ENABLE_RUN_LUAU, true),
     rpcTimeoutMs: parseInteger(env.DEX_MCP_RPC_TIMEOUT_MS, DEFAULT_TIMEOUT_MS),
     httpMode: parseBool(env.DEX_MCP_HTTP, false),
+    host: env.DEX_MCP_HOST,
   };
 }
