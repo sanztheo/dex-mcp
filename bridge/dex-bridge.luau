@@ -4,15 +4,15 @@
 -- Markers (replaced by src/bridge-hub/bridge-loader.ts):
 --   __DEX_MAKECODEC__  -> local makeCodec = (function() <codec.luau> end)()
 --   __DEX_MAKECORE__   -> local makeCore  = (function() <core.luau>  end)()
---   __DEX_PORT__       -> the WS/HTTP port number
+--   __DEX_WS_BASE__    -> the WebSocket origin (ws://127.0.0.1:port or wss://host)
 --   __DEX_TOKEN__      -> the shared token string
 
 __DEX_MAKECODEC__
 __DEX_MAKECORE__
 
-local PORT = __DEX_PORT__
+local WS_BASE = "__DEX_WS_BASE__"
 local TOKEN = "__DEX_TOKEN__"
-local URL = ("ws://127.0.0.1:%d?token=%s"):format(PORT, TOKEN)
+local URL = WS_BASE .. "?token=" .. TOKEN
 local RECONNECT_DELAY = 3
 
 local HttpService = game:GetService("HttpService")

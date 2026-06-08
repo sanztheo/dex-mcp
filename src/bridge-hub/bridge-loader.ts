@@ -21,8 +21,13 @@ function luaQuote(value: string): string {
   return `"${escaped}"`;
 }
 
-/** Assemble the single Luau payload the executor loads: codec+core inlined, port/token injected. */
-export function assembleBridge(port: number, token: string): string {
+/**
+ * Assemble the single Luau payload the executor loads: codec+core inlined, WS origin + token
+ * injected. `wsBase` is the full WebSocket origin the bridge dials — `ws://127.0.0.1:<port>`
+ * locally, `wss://<host>` behind a TLS proxy (Railway). The token is appended as a query param
+ * by the glue.
+ */
+export function assembleBridge(wsBase: string, token: string): string {
   const codec = read("codec.luau");
   const core = read("core.luau");
   const glue = read("dex-bridge.luau");
@@ -32,6 +37,6 @@ export function assembleBridge(port: number, token: string): string {
     // Replace each standalone marker line with its assembled value.
     .replace(/^__DEX_MAKECODEC__$/m, `local makeCodec = (function()\n${codec}\nend)()`)
     .replace(/^__DEX_MAKECORE__$/m, `local makeCore = (function()\n${core}\nend)()`)
-    .replace(/^local PORT = __DEX_PORT__$/m, `local PORT = ${String(port)}`)
+    .replace('"__DEX_WS_BASE__"', luaQuote(wsBase))
     .replace('"__DEX_TOKEN__"', luaQuote(token));
 }

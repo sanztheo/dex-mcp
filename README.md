@@ -25,8 +25,10 @@ On startup the server prints (to stderr) the local WebSocket URL and a shared to
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `DEX_MCP_HTTP` | `false` | **Remote mode.** Bind `0.0.0.0`, serve MCP over HTTP at `/mcp`, and point the bridge at `wss://<host>`. See [Remote (hosted) mode](#remote-hosted-mode). |
+| `PORT` | — | Honoured before `DEX_MCP_PORT` (the var hosts like Railway inject). |
 | `DEX_MCP_PORT` | `8392` | WebSocket hub port |
-| `DEX_MCP_TOKEN` | auto-generated, persisted | Shared token required by the bridge. Generated once and saved (see `DEX_MCP_TOKEN_FILE`) so it stays stable across server restarts; set explicitly to pin it. |
+| `DEX_MCP_TOKEN` | auto-generated, persisted | Shared token required by the bridge. Generated once and saved (see `DEX_MCP_TOKEN_FILE`) so it stays stable across server restarts; set explicitly to pin it. **Required in remote mode** (container disks are ephemeral). |
 | `DEX_MCP_TOKEN_FILE` | `~/.dex-mcp/token` | Where the auto-generated token is persisted. |
 | `DEX_MCP_ENABLE_WRITE` | `true` | Enable `set_property` |
 | `DEX_MCP_ENABLE_REMOTES` | `true` | Enable remote calling/spying |
@@ -37,6 +39,34 @@ On startup the server prints (to stderr) the local WebSocket URL and a shared to
 > server start. With a persisted token this no longer happens on restart; if you still
 > see it, the bridge chunk is stale — stop it in your executor and re-run the loader
 > one-liner so it fetches the current token.
+
+## Remote (hosted) mode
+
+By default dex-mcp is local-only: the MCP server talks to its client over **stdio** and the hub
+binds `127.0.0.1`, so the executor and the MCP client must share one machine. Remote mode lifts
+that constraint — the same process binds `0.0.0.0`, exposes the MCP server over **Streamable HTTP**
+at `/mcp`, and serves the bridge a `wss://<host>` target — so a hosted instance (e.g. Railway) can
+sit between an executor and a remote MCP client.
+
+Enable it with two env vars on the host:
+
+| Var | Value |
+|---|---|
+| `DEX_MCP_HTTP` | `true` |
+| `DEX_MCP_TOKEN` | a fixed secret you choose (the disk is ephemeral, so pin it) |
+
+`PORT` is injected by the platform and honoured automatically. Then:
+
+- **MCP client** → point it at `https://<host>/mcp`, authenticating with the token via
+  `Authorization: Bearer <token>` (or `?token=<token>`).
+- **Executor (Roblox side)** → `loadstring(game:HttpGet("https://<host>/bridge?token=<token>"))()`.
+  In remote mode `/bridge` is token-gated (the served chunk embeds the token, so a public `/bridge`
+  would leak it) and injects `wss://<host>` as the bridge's connect target.
+- `GET /health` returns `200` for the platform healthcheck.
+
+> ⚠️ **Security.** `/mcp` runs arbitrary Luau (`run_luau`), writes properties, and fires remotes in
+> the connected client. In remote mode that capability is reachable over the public internet, gated
+> only by the shared token. Use a long random `DEX_MCP_TOKEN`, and only against a game you own.
 
 ## The bridge (Roblox side)
 

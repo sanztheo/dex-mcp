@@ -17,7 +17,7 @@ describe("GET /bridge", () => {
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(body).toContain('local TOKEN = "tok"');
-    expect(body).toContain(`local PORT = ${port}`); // the LIVE ephemeral port, not 0
+    expect(body).toContain(`local WS_BASE = "ws://127.0.0.1:${port}"`); // LIVE ephemeral port, not 0
     expect(body).toContain("Core.dispatch");
     expect(body).not.toContain("__DEX_TOKEN__");
   });
