@@ -26,11 +26,17 @@ On startup the server prints (to stderr) the local WebSocket URL and a shared to
 | Variable | Default | Purpose |
 |---|---|---|
 | `DEX_MCP_PORT` | `8392` | WebSocket hub port |
-| `DEX_MCP_TOKEN` | auto-generated | Shared token required by the bridge |
+| `DEX_MCP_TOKEN` | auto-generated, persisted | Shared token required by the bridge. Generated once and saved (see `DEX_MCP_TOKEN_FILE`) so it stays stable across server restarts; set explicitly to pin it. |
+| `DEX_MCP_TOKEN_FILE` | `~/.dex-mcp/token` | Where the auto-generated token is persisted. |
 | `DEX_MCP_ENABLE_WRITE` | `true` | Enable `set_property` |
 | `DEX_MCP_ENABLE_REMOTES` | `true` | Enable remote calling/spying |
 | `DEX_MCP_ENABLE_RUN_LUAU` | `true` | Enable `run_luau` |
 | `DEX_MCP_RPC_TIMEOUT_MS` | `15000` | Per-request timeout |
+
+> **401 Unauthorized from the bridge?** The bridge baked in a token from an earlier
+> server start. With a persisted token this no longer happens on restart; if you still
+> see it, the bridge chunk is stale — stop it in your executor and re-run the loader
+> one-liner so it fetches the current token.
 
 ## The bridge (Roblox side)
 

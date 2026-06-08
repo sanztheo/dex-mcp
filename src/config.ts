@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { resolveToken } from "./token-store.js";
 
 export interface DexConfig {
   port: number;
@@ -25,7 +25,7 @@ function parseInteger(value: string | undefined, fallback: number): number {
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): DexConfig {
   return {
     port: parseInteger(env.DEX_MCP_PORT, DEFAULT_PORT),
-    token: env.DEX_MCP_TOKEN ?? randomBytes(16).toString("hex"),
+    token: resolveToken(env),
     enableWrite: parseBool(env.DEX_MCP_ENABLE_WRITE, true),
     enableRemotes: parseBool(env.DEX_MCP_ENABLE_REMOTES, true),
     enableRunLuau: parseBool(env.DEX_MCP_ENABLE_RUN_LUAU, true),
